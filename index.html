@@ -227,6 +227,68 @@ function totais(){
     vlrAtrasado: soma(atrasadas,'valor_total') - soma(atrasadas,'valor_recebido')};
 }
 
+function proximaSegunda(){
+  const d = new Date(hoje()+'T12:00:00');
+  const dow = d.getDay();
+  d.setDate(d.getDate() + (dow===1 ? 0 : (8-dow)%7));
+  return d.toISOString().slice(0,10);
+}
+
+function filaSegunda(){
+  const seg = proximaSegunda();
+  const saldo = p => Number(p.valor_recebido)-Number(p.valor_repassado);
+  const pend = PARCELAS.filter(p => ['Pendente','Atrasado'].includes(repasseReal(p)));
+  const naFila = pend.filter(p => p.programacao_repasse && p.programacao_repasse <= seg);
+  const semData = pend.filter(p => !p.programacao_repasse);
+  return {seg, naFila, semData, saldo,
+    total: naFila.reduce((s,p)=>s+saldo(p),0),
+    totalSemData: semData.reduce((s,p)=>s+saldo(p),0)};
+}
+
+function blocoSegunda(){
+  const f = filaSegunda();
+  const porDono = {};
+  f.naFila.forEach(p => {
+    const a = ACORDOS.find(x=>x.id===p.acordo_id) || {};
+    const d = a.dono || 'Sem destinatário';
+    porDono[d] = porDono[d] || {v:0,n:0,atras:0};
+    porDono[d].v += f.saldo(p); porDono[d].n++;
+    if(p.programacao_repasse < hoje()) porDono[d].atras++;
+  });
+  const linhas = Object.entries(porDono).sort((a,b)=>b[1].v-a[1].v).map(par =>
+    '<tr><td class="strong">'+esc(par[0])+'</td>'
+    + '<td class="muted">'+par[1].n+' parcela'+(par[1].n===1?'':'s')+'</td>'
+    + '<td>'+(par[1].atras ? '<span class="tag late">'+par[1].atras+' atrasada'+(par[1].atras===1?'':'s')+'</span>' : '<span class="muted">em dia</span>')+'</td>'
+    + '<td class="num strong">'+brl(par[1].v)+'</td></tr>').join('');
+
+  return '<section class="block"><h2>Fila da próxima segunda · '+dt(f.seg)+'</h2>'
+    + '<p class="hint">Tudo com repasse programado até essa data e ainda não pago. Inclui o que ficou para trás.</p>'
+    + '<div class="panel">'
+    + (f.naFila.length
+      ? '<table><thead><tr><th>Destinatário</th><th>Volume</th><th>Situação</th><th class="num">'+brl(f.total)+'</th></tr></thead><tbody>'+linhas+'</tbody></table>'
+      : '<div class="empty">Nada programado até a próxima segunda.</div>')
+    + '</div>'
+    + '<div class="toolbar"><button class="btn ghost" id="copiarFila">Copiar resumo para a controladoria</button>'
+    + (f.semData.length ? '<span class="hint">'+f.semData.length+' parcelas recebidas sem data programada ('+brl(f.totalSemData)+') ficam fora desta fila.</span>' : '')
+    + '</div></section>';
+}
+
+function copiarFila(){
+  const f = filaSegunda();
+  const porDono = {};
+  f.naFila.forEach(p => {
+    const a = ACORDOS.find(x=>x.id===p.acordo_id) || {};
+    const d = a.dono || 'Sem destinatário';
+    porDono[d] = (porDono[d]||0) + f.saldo(p);
+  });
+  const txt = ['Repasses programados até '+dt(f.seg)+':','']
+    .concat(Object.entries(porDono).sort((a,b)=>b[1]-a[1]).map(par => par[0]+' - '+brl(par[1])))
+    .concat(['','Total: '+brl(f.total)]).join('\n');
+  navigator.clipboard.writeText(txt).then(
+    () => alert('Resumo copiado.'),
+    () => prompt('Copie o texto abaixo:', txt));
+}
+
 function renderPainel(){
   const t = totais();
   const pend = PARCELAS.filter(p => repasseReal(p)==='Pendente' || repasseReal(p)==='Atrasado');
@@ -282,6 +344,7 @@ function renderPainel(){
         + '<div><dt>Em atraso</dt><dd>'+brlShort(t.vlrAtrasado)+'</dd></div>'
       + '</dl>'
     + '</section>'
+    + blocoSegunda()
     + '<section class="block"><h2>Entradas e repasses por mês</h2>'
       + '<p class="hint">Últimos 12 meses com movimento.</p>'
       + '<div class="panel"><div class="months">'+barras+'</div>'
@@ -625,7 +688,7 @@ document.querySelectorAll('.nav button').forEach(b =>
   b.onclick = () => { view = b.dataset.view; abertoId = null; render(); });
 
 document.addEventListener('click', e => {
-  const t = e.target.closest('[data-abrir],[data-filtro],[data-receber],[data-repassar],[data-estorno-rep],[data-estorno-rec],[data-editar],#novo,#csv');
+  const t = e.target.closest('[data-abrir],[data-filtro],[data-receber],[data-repassar],[data-estorno-rep],[data-estorno-rec],[data-editar],#novo,#csv,#copiarFila');
   if(!t) return;
   if(t.dataset.abrir){ abertoId = t.dataset.abrir; view='detalhe'; render(); }
   else if(t.dataset.filtro){ filtro = t.dataset.filtro; renderAcordos(); }
@@ -636,6 +699,7 @@ document.addEventListener('click', e => {
   else if(t.dataset.editar){ e.stopPropagation(); modalParcela(t.dataset.editar); }
   else if(t.id === 'novo'){ modalAcordo(); }
   else if(t.id === 'csv'){ baixarCsv(); }
+  else if(t.id === 'copiarFila'){ copiarFila(); }
 });
 
 recarregar();
