@@ -407,6 +407,8 @@ function renderDetalhe(id){
     + '<td class="num" style="white-space:nowrap">'
       + (situacaoReal(p)!=='Quitado' ? '<button class="btn small" data-receber="'+p.id+'">Receber</button> ' : '')
       + (['Pendente','Atrasado'].includes(repasseReal(p)) ? '<button class="btn small ghost" data-repassar="'+p.id+'">Repassar</button> ' : '')
+      + (repasseReal(p)==='Repassado' ? '<button class="btn small ghost" data-estorno-rep="'+p.id+'">Estornar repasse</button> ' : '')
+      + (Number(p.valor_recebido)>0 ? '<button class="btn small ghost" data-estorno-rec="'+p.id+'">Estornar recebimento</button> ' : '')
       + '<button class="btn small ghost" data-editar="'+p.id+'">Editar</button></td>'
     + '</tr>').join('');
 
@@ -453,6 +455,27 @@ async function repassar(pid){
     updated_at: new Date().toISOString()
   }).eq('id',pid);
   if(r.error) return alert('Não deu para salvar: '+r.error.message);
+  await recarregar();
+}
+
+async function estornarRepasse(pid){
+  if(!confirm('Desfazer o repasse desta parcela? O valor volta para a fila de A repassar.')) return;
+  const r = await db.from('parcelas').update({
+    valor_repassado: 0, data_repasse: null, status_repasse: 'Pendente',
+    updated_at: new Date().toISOString()
+  }).eq('id',pid);
+  if(r.error) return alert('Não deu para estornar: '+r.error.message);
+  await recarregar();
+}
+
+async function estornarRecebimento(pid){
+  if(!confirm('Desfazer o recebimento desta parcela? O repasse também volta a zero.')) return;
+  const r = await db.from('parcelas').update({
+    valor_recebido: 0, data_pagamento: null, situacao: 'Aberto',
+    valor_repassado: 0, data_repasse: null, status_repasse: 'Pendente',
+    updated_at: new Date().toISOString()
+  }).eq('id',pid);
+  if(r.error) return alert('Não deu para estornar: '+r.error.message);
   await recarregar();
 }
 
@@ -602,12 +625,14 @@ document.querySelectorAll('.nav button').forEach(b =>
   b.onclick = () => { view = b.dataset.view; abertoId = null; render(); });
 
 document.addEventListener('click', e => {
-  const t = e.target.closest('[data-abrir],[data-filtro],[data-receber],[data-repassar],[data-editar],#novo,#csv');
+  const t = e.target.closest('[data-abrir],[data-filtro],[data-receber],[data-repassar],[data-estorno-rep],[data-estorno-rec],[data-editar],#novo,#csv');
   if(!t) return;
   if(t.dataset.abrir){ abertoId = t.dataset.abrir; view='detalhe'; render(); }
   else if(t.dataset.filtro){ filtro = t.dataset.filtro; renderAcordos(); }
   else if(t.dataset.receber){ e.stopPropagation(); receber(t.dataset.receber); }
   else if(t.dataset.repassar){ e.stopPropagation(); repassar(t.dataset.repassar); }
+  else if(t.dataset.estornoRep){ e.stopPropagation(); estornarRepasse(t.dataset.estornoRep); }
+  else if(t.dataset.estornoRec){ e.stopPropagation(); estornarRecebimento(t.dataset.estornoRec); }
   else if(t.dataset.editar){ e.stopPropagation(); modalParcela(t.dataset.editar); }
   else if(t.id === 'novo'){ modalAcordo(); }
   else if(t.id === 'csv'){ baixarCsv(); }
