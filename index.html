@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Repasses · Stenio Advogados</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{
+  --ink:#16202b;
+  --ink-2:#5a6874;
+  --paper:#eef1ef;
+  --surface:#ffffff;
+  --rule:#d3dad6;
+  --green:#1f6f5c;
+  --brick:#b3402b;
+  --amber:#9a6b16;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  font-family:'IBM Plex Sans',system-ui,sans-serif;
+  background:var(--paper);color:var(--ink);
+  font-variant-numeric:tabular-nums;
+  -webkit-font-smoothing:antialiased;
+}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer;background:none;border:none}
+a{color:inherit}
+
+.shell{display:grid;grid-template-columns:216px 1fr;min-height:100vh}
+.rail{border-right:1px solid var(--rule);padding:28px 20px;background:var(--surface)}
+.brand{font-weight:700;font-size:17px;letter-spacing:-.01em;line-height:1.2}
+.brand span{display:block;font-weight:400;font-size:12.5px;color:var(--ink-2);margin-top:3px}
+.nav{margin-top:32px;display:flex;flex-direction:column;gap:2px}
+.nav button{
+  text-align:left;padding:8px 10px;border-radius:5px;font-size:14.5px;
+  color:var(--ink-2);font-weight:500;
+}
+.nav button:hover{background:var(--paper)}
+.nav button[aria-current="true"]{background:var(--ink);color:#fff}
+.rail-foot{margin-top:28px;padding-top:18px;border-top:1px solid var(--rule);font-size:12.5px;color:var(--ink-2);line-height:1.5}
+main{padding:34px 40px 80px;max-width:1240px}
+h1{font-size:24px;font-weight:600;letter-spacing:-.015em}
+.sub{color:var(--ink-2);font-size:14px;margin-top:4px}
+
+.hero{margin-top:28px;background:var(--surface);border:1px solid var(--rule);border-radius:8px}
+.hero-main{padding:26px 28px 22px}
+.hero-label{font-size:13.5px;color:var(--ink-2)}
+.hero-value{font-size:46px;font-weight:600;letter-spacing:-.03em;line-height:1.05;margin-top:6px}
+.hero-note{font-size:13.5px;color:var(--ink-2);margin-top:8px;max-width:60ch;line-height:1.5}
+.strip{display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid var(--rule)}
+.strip div{padding:16px 28px;border-left:1px solid var(--rule)}
+.strip div:first-child{border-left:none}
+.strip dt{font-size:12.5px;color:var(--ink-2)}
+.strip dd{font-size:19px;font-weight:600;margin-top:3px;letter-spacing:-.01em}
+
+.block{margin-top:34px}
+.block h2{font-size:15.5px;font-weight:600}
+.block .hint{font-size:13px;color:var(--ink-2);margin-top:3px}
+.panel{margin-top:14px;background:var(--surface);border:1px solid var(--rule);border-radius:8px;overflow:hidden}
+
+.months{display:flex;gap:14px;align-items:flex-end;padding:24px 28px 18px;overflow-x:auto}
+.month{min-width:44px;flex:1;text-align:center}
+.stack{height:120px;display:flex;gap:3px;align-items:flex-end;justify-content:center}
+.bar{width:14px;border-radius:2px 2px 0 0;min-height:2px}
+.bar.in{background:var(--green)}
+.bar.out{background:#a9c4bc}
+.month small{display:block;font-size:11.5px;color:var(--ink-2);margin-top:7px}
+.legend{display:flex;gap:16px;padding:0 28px 18px;font-size:12.5px;color:var(--ink-2);align-items:center}
+.dot{width:9px;height:9px;border-radius:2px;display:inline-block;margin-right:6px;vertical-align:middle}
+
+table{width:100%;border-collapse:collapse;font-size:14px}
+th{
+  text-align:left;font-weight:600;font-size:12.5px;color:var(--ink-2);
+  padding:11px 16px;border-bottom:1px solid var(--rule);white-space:nowrap;
+}
+td{padding:11px 16px;border-bottom:1px solid var(--rule);vertical-align:middle}
+tbody tr:last-child td{border-bottom:none}
+tbody tr.clickable:hover{background:var(--paper);cursor:pointer}
+.num{text-align:right;white-space:nowrap}
+.muted{color:var(--ink-2)}
+.strong{font-weight:600}
+
+.tag{
+  display:inline-block;font-size:12px;font-weight:500;padding:2px 8px;
+  border-radius:20px;border:1px solid currentColor;white-space:nowrap;
+}
+.tag.ok{color:var(--green)}
+.tag.late{color:var(--brick)}
+.tag.open{color:var(--amber)}
+
+.toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:18px}
+.tabs{display:flex;border:1px solid var(--rule);border-radius:6px;overflow:hidden;background:var(--surface)}
+.tabs button{padding:7px 14px;font-size:13.5px;color:var(--ink-2);border-right:1px solid var(--rule)}
+.tabs button:last-child{border-right:none}
+.tabs button[aria-pressed="true"]{background:var(--ink);color:#fff}
+.search{
+  flex:1;min-width:200px;padding:8px 12px;border:1px solid var(--rule);
+  border-radius:6px;background:var(--surface);
+}
+.search:focus{outline:2px solid var(--ink);outline-offset:-1px}
+.btn{
+  padding:8px 14px;border-radius:6px;background:var(--ink);color:#fff;
+  font-size:13.5px;font-weight:500;
+}
+.btn.ghost{background:var(--surface);color:var(--ink);border:1px solid var(--rule)}
+.btn.small{padding:4px 10px;font-size:12.5px}
+.btn:focus-visible,.nav button:focus-visible,.tabs button:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+
+.prog{height:5px;background:var(--rule);border-radius:3px;overflow:hidden;min-width:88px}
+.prog i{display:block;height:100%;background:var(--green)}
+
+.back{font-size:13.5px;color:var(--ink-2);margin-bottom:14px}
+.back:hover{color:var(--ink);text-decoration:underline}
+.meta{display:flex;gap:28px;flex-wrap:wrap;margin-top:14px;font-size:13.5px}
+.meta dt{color:var(--ink-2);font-size:12.5px}
+.meta dd{font-weight:500;margin-top:2px}
+.obs{
+  margin-top:16px;padding:14px 16px;background:var(--surface);
+  border:1px solid var(--rule);border-radius:8px;font-size:13.5px;
+  line-height:1.55;white-space:pre-wrap;max-width:80ch;
+}
+
+.veil{position:fixed;inset:0;background:rgba(22,32,43,.4);display:grid;place-items:center;padding:20px;z-index:20}
+.modal{
+  background:var(--surface);border-radius:10px;width:100%;max-width:560px;
+  max-height:88vh;overflow:auto;padding:26px 28px;
+}
+.modal h3{font-size:17px;font-weight:600}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:18px}
+.field label{display:block;font-size:12.5px;color:var(--ink-2);margin-bottom:5px}
+.field input,.field select,.field textarea{
+  width:100%;padding:8px 10px;border:1px solid var(--rule);border-radius:6px;background:var(--surface);
+}
+.field.wide{grid-column:1 / -1}
+.modal-foot{display:flex;justify-content:flex-end;gap:10px;margin-top:22px}
+
+.empty{padding:40px 28px;text-align:center;color:var(--ink-2);font-size:14px}
+.loading{padding:60px;text-align:center;color:var(--ink-2)}
+.err{
+  margin:20px 0;padding:14px 16px;border:1px solid var(--brick);
+  border-radius:8px;color:var(--brick);font-size:14px;background:var(--surface);
+}
+@media (max-width:860px){
+  .shell{grid-template-columns:1fr}
+  .rail{border-right:none;border-bottom:1px solid var(--rule)}
+  .nav{flex-direction:row;flex-wrap:wrap;margin-top:16px}
+  .rail-foot{display:none}
+  main{padding:24px 18px 60px}
+  .strip{grid-template-columns:1fr 1fr}
+  .strip div:nth-child(3){border-left:none}
+  .strip div:nth-child(n+3){border-top:1px solid var(--rule)}
+  .hero-value{font-size:36px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<div class="shell">
+  <aside class="rail">
+    <div class="brand">Repasses<span>Stenio Advogados</span></div>
+    <nav class="nav">
+      <button data-view="painel" aria-current="true">Painel</button>
+      <button data-view="acordos">Acordos</button>
+      <button data-view="repassar">A repassar</button>
+    </nav>
+    <div class="rail-foot" id="railFoot"></div>
+  </aside>
+  <main id="main"><div class="loading">Carregando…</div></main>
+</div>
+
+<script>
+const SUPABASE_URL = 'https://haxsaymsakyfqbnzbnwl.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_XGt4wMdu7L9XkhOPKpPBJA_dVjqyzTR';
+const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let ACORDOS = [], PARCELAS = [], view = 'painel', filtro = 'todos', busca = '', abertoId = null;
+
+const brl = n => (Number(n)||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+const brlShort = n => (Number(n)||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL',maximumFractionDigits:0});
+const dt = s => s ? s.split('-').reverse().join('/') : '—';
+const hoje = () => new Date().toISOString().slice(0,10);
+const esc = s => String(s??'').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const el = id => document.getElementById(id);
+
+const parcelasDe = id => PARCELAS.filter(p => p.acordo_id === id);
+const soma = (arr,k) => arr.reduce((s,p)=>s+(Number(p[k])||0),0);
+
+function situacaoReal(p){
+  if(Number(p.valor_recebido) >= Number(p.valor_total) && Number(p.valor_total) > 0) return 'Quitado';
+  if(p.data_vencimento && p.data_vencimento < hoje()) return 'Atrasado';
+  return 'Aberto';
+}
+function repasseReal(p){
+  const receb = Number(p.valor_recebido)||0, rep = Number(p.valor_repassado)||0;
+  if(receb === 0) return '—';
+  if(rep >= receb) return 'Repassado';
+  if(p.programacao_repasse && p.programacao_repasse < hoje()) return 'Atrasado';
+  return 'Pendente';
+}
+const tagSit = s => '<span class="tag '+(s==='Quitado'?'ok':s==='Atrasado'?'late':'open')+'">'+s+'</span>';
+const tagRep = s => s==='—' ? '<span class="muted">—</span>'
+  : '<span class="tag '+(s==='Repassado'?'ok':s==='Atrasado'?'late':'open')+'">'+s+'</span>';
+
+async function carregar(){
+  const a = await db.from('acordos').select('*').order('cliente');
+  const p = await db.from('parcelas').select('*').order('data_vencimento').range(0,9999);
+  if(a.error || p.error){
+    el('main').innerHTML = '<div class="err">Não consegui ler o banco: '
+      + esc((a.error||p.error).message)
+      + '<br><br>Se isso persistir, o projeto do Supabase pode ter hibernado. Abra o painel do Supabase e clique em Resume.</div>';
+    return null;
+  }
+  ACORDOS = a.data; PARCELAS = p.data;
+  return true;
+}
+
+function totais(){
+  const total = soma(PARCELAS,'valor_total');
+  const receb = soma(PARCELAS,'valor_recebido');
+  const rep = soma(PARCELAS,'valor_repassado');
+  const atrasadas = PARCELAS.filter(p => situacaoReal(p)==='Atrasado');
+  return {total, receb, rep, aRepassar: receb-rep, atrasadas,
+    vlrAtrasado: soma(atrasadas,'valor_total') - soma(atrasadas,'valor_recebido')};
+}
+
+function renderPainel(){
+  const t = totais();
+  const pend = PARCELAS.filter(p => repasseReal(p)==='Pendente' || repasseReal(p)==='Atrasado');
+
+  const meses = {};
+  PARCELAS.forEach(p => {
+    if(p.data_pagamento && Number(p.valor_recebido)>0){
+      const m = p.data_pagamento.slice(0,7);
+      (meses[m] = meses[m] || {in:0,out:0}).in += Number(p.valor_recebido);
+    }
+    if(p.data_repasse && Number(p.valor_repassado)>0){
+      const m = p.data_repasse.slice(0,7);
+      (meses[m] = meses[m] || {in:0,out:0}).out += Number(p.valor_repassado);
+    }
+  });
+  const chaves = Object.keys(meses).sort().slice(-12);
+  const teto = Math.max(1, ...chaves.map(k => Math.max(meses[k].in, meses[k].out)));
+  const nomeMes = k => {
+    const partes = k.split('-');
+    return ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'][+partes[1]-1]+'/'+partes[0].slice(2);
+  };
+
+  const barras = chaves.length ? chaves.map(k =>
+    '<div class="month"><div class="stack">'
+    + '<div class="bar in" style="height:'+(meses[k].in/teto*100)+'%" title="Recebido '+brl(meses[k].in)+'"></div>'
+    + '<div class="bar out" style="height:'+(meses[k].out/teto*100)+'%" title="Repassado '+brl(meses[k].out)+'"></div>'
+    + '</div><small>'+nomeMes(k)+'</small></div>').join('')
+    : '<div class="empty">Sem movimento registrado ainda.</div>';
+
+  const linhasAtraso = t.atrasadas.slice(0,8).map(p => {
+    const a = ACORDOS.find(x=>x.id===p.acordo_id) || {};
+    const dias = Math.floor((new Date(hoje()) - new Date(p.data_vencimento))/86400000);
+    return '<tr class="clickable" data-abrir="'+p.acordo_id+'">'
+      + '<td>'+esc(a.cliente||'—')+'</td>'
+      + '<td class="muted">Parcela '+(p.numero_parcela||'—')+'</td>'
+      + '<td>'+dt(p.data_vencimento)+' <span class="muted">· '+dias+' dias</span></td>'
+      + '<td class="num strong">'+brl(Number(p.valor_total)-Number(p.valor_recebido))+'</td></tr>';
+  }).join('');
+
+  el('main').innerHTML =
+    '<h1>Painel</h1><p class="sub">Posição de '+dt(hoje())+'</p>'
+    + '<section class="hero">'
+      + '<div class="hero-main">'
+        + '<div class="hero-label">Recebido e ainda não repassado</div>'
+        + '<div class="hero-value">'+brl(t.aRepassar)+'</div>'
+        + '<p class="hero-note">Dinheiro que já entrou de acordos e ainda está parado antes de chegar ao destinatário. '
+        + pend.length+' parcela'+(pend.length===1?'':'s')+' nessa situação.</p>'
+      + '</div>'
+      + '<dl class="strip">'
+        + '<div><dt>Contratado</dt><dd>'+brlShort(t.total)+'</dd></div>'
+        + '<div><dt>Recebido</dt><dd>'+brlShort(t.receb)+'</dd></div>'
+        + '<div><dt>Repassado</dt><dd>'+brlShort(t.rep)+'</dd></div>'
+        + '<div><dt>Em atraso</dt><dd>'+brlShort(t.vlrAtrasado)+'</dd></div>'
+      + '</dl>'
+    + '</section>'
+    + '<section class="block"><h2>Entradas e repasses por mês</h2>'
+      + '<p class="hint">Últimos 12 meses com movimento.</p>'
+      + '<div class="panel"><div class="months">'+barras+'</div>'
+      + '<div class="legend"><span><i class="dot" style="background:var(--green)"></i>Recebido</span>'
+      + '<span><i class="dot" style="background:#a9c4bc"></i>Repassado</span></div></div></section>'
+    + '<section class="block"><h2>Parcelas vencidas</h2>'
+      + '<p class="hint">'+t.atrasadas.length+' no total. As oito mais antigas.</p>'
+      + '<div class="panel">'
+      + (t.atrasadas.length
+        ? '<table><thead><tr><th>Cliente</th><th></th><th>Venceu</th><th class="num">Em aberto</th></tr></thead><tbody>'+linhasAtraso+'</tbody></table>'
+        : '<div class="empty">Nenhuma parcela vencida. Tudo em dia.</div>')
+      + '</div></section>';
+}
+
+function renderAcordos(){
+  const termo = busca.toLowerCase();
+  const lista = ACORDOS.filter(a => {
+    const ps = parcelasDe(a.id);
+    const quitado = ps.length > 0 && ps.every(p => situacaoReal(p)==='Quitado');
+    const atrasado = ps.some(p => situacaoReal(p)==='Atrasado');
+    if(filtro==='quitados' && !quitado) return false;
+    if(filtro==='atrasados' && !atrasado) return false;
+    if(filtro==='abertos' && quitado) return false;
+    if(termo && !((a.cliente||'')+' '+(a.dono||'')+' '+(a.numero_processo||'')).toLowerCase().includes(termo)) return false;
+    return true;
+  });
+
+  const linhas = lista.map(a => {
+    const ps = parcelasDe(a.id);
+    const tot = soma(ps,'valor_total'), rec = soma(ps,'valor_recebido');
+    const pct = tot ? Math.min(100, rec/tot*100) : 0;
+    const atrasado = ps.some(p => situacaoReal(p)==='Atrasado');
+    const quitado = ps.length>0 && ps.every(p => situacaoReal(p)==='Quitado');
+    return '<tr class="clickable" data-abrir="'+a.id+'">'
+      + '<td class="strong">'+esc(a.cliente)+'<div class="muted" style="font-weight:400;font-size:12.5px">'+esc(a.dono||'sem destinatário')+'</div></td>'
+      + '<td class="muted">'+esc(a.numero_processo||'—')+'</td>'
+      + '<td class="muted">'+ps.length+'</td>'
+      + '<td>'+tagSit(quitado?'Quitado':atrasado?'Atrasado':'Aberto')+'</td>'
+      + '<td><div class="prog"><i style="width:'+pct+'%"></i></div></td>'
+      + '<td class="num">'+brl(rec)+'<div class="muted" style="font-size:12.5px">de '+brl(tot)+'</div></td>'
+      + '</tr>';
+  }).join('');
+
+  el('main').innerHTML =
+    '<h1>Acordos</h1><p class="sub">'+lista.length+' de '+ACORDOS.length+'</p>'
+    + '<div class="toolbar">'
+      + '<div class="tabs">'
+        + ['todos','abertos','atrasados','quitados'].map(f =>
+            '<button data-filtro="'+f+'" aria-pressed="'+(filtro===f)+'">'+f[0].toUpperCase()+f.slice(1)+'</button>').join('')
+      + '</div>'
+      + '<input class="search" id="busca" placeholder="Buscar cliente, destinatário ou processo" value="'+esc(busca)+'">'
+      + '<button class="btn" id="novo">Novo acordo</button>'
+      + '<button class="btn ghost" id="csv">Baixar CSV</button>'
+    + '</div>'
+    + '<div class="panel">'
+    + (lista.length
+      ? '<table><thead><tr><th>Cliente</th><th>Processo</th><th>Parcelas</th><th>Situação</th><th>Recebimento</th><th class="num">Valores</th></tr></thead><tbody>'+linhas+'</tbody></table>'
+      : '<div class="empty">Nada encontrado com esse filtro.</div>')
+    + '</div>';
+
+  const b = el('busca');
+  if(b){ b.oninput = e => { busca = e.target.value; renderAcordos(); el('busca').focus(); }; }
+}
+
+function renderRepassar(){
+  const pend = PARCELAS.filter(p => ['Pendente','Atrasado'].includes(repasseReal(p)))
+    .sort((a,b)=>(a.programacao_repasse||'9999').localeCompare(b.programacao_repasse||'9999'));
+  const totalPend = pend.reduce((s,p)=>s+(Number(p.valor_recebido)-Number(p.valor_repassado)),0);
+
+  const porDono = {};
+  pend.forEach(p => {
+    const a = ACORDOS.find(x=>x.id===p.acordo_id) || {};
+    const d = a.dono || 'Sem destinatário';
+    porDono[d] = (porDono[d]||0) + (Number(p.valor_recebido)-Number(p.valor_repassado));
+  });
+
+  const linhasDono = Object.entries(porDono).sort((a,b)=>b[1]-a[1]).map(par =>
+    '<tr><td class="strong">'+esc(par[0])+'</td><td class="num strong">'+brl(par[1])+'</td></tr>').join('');
+
+  const linhas = pend.map(p => {
+    const a = ACORDOS.find(x=>x.id===p.acordo_id) || {};
+    return '<tr class="clickable" data-abrir="'+p.acordo_id+'">'
+      + '<td class="strong">'+esc(a.dono||'—')+'</td>'
+      + '<td>'+esc(a.cliente||'—')+'<div class="muted" style="font-size:12.5px">Parcela '+(p.numero_parcela||'—')+'</div></td>'
+      + '<td>'+dt(p.data_pagamento)+'</td>'
+      + '<td>'+dt(p.programacao_repasse)+'</td>'
+      + '<td>'+tagRep(repasseReal(p))+'</td>'
+      + '<td class="num strong">'+brl(Number(p.valor_recebido)-Number(p.valor_repassado))+'</td>'
+      + '<td class="num"><button class="btn small" data-repassar="'+p.id+'">Repassar</button></td></tr>';
+  }).join('');
+
+  el('main').innerHTML =
+    '<h1>A repassar</h1><p class="sub">Recebido do cliente e ainda não entregue ao destinatário</p>'
+    + '<section class="hero"><div class="hero-main">'
+      + '<div class="hero-label">Total parado</div>'
+      + '<div class="hero-value">'+brl(totalPend)+'</div>'
+      + '<p class="hero-note">Distribuído entre '+Object.keys(porDono).length+' destinatário'
+      + (Object.keys(porDono).length===1?'':'s')+'.</p>'
+    + '</div></section>'
+    + (linhasDono ? '<section class="block"><h2>Por destinatário</h2><div class="panel"><table><tbody>'+linhasDono+'</tbody></table></div></section>' : '')
+    + '<section class="block"><h2>Parcela a parcela</h2><div class="panel">'
+    + (pend.length
+      ? '<table><thead><tr><th>Destinatário</th><th>Cliente</th><th>Recebido em</th><th>Programado</th><th>Status</th><th class="num">Valor</th><th></th></tr></thead><tbody>'+linhas+'</tbody></table>'
+      : '<div class="empty">Nada pendente. Todo valor recebido já foi repassado.</div>')
+    + '</div></section>';
+}
+
+function renderDetalhe(id){
+  const a = ACORDOS.find(x=>x.id===id);
+  if(!a){ view='acordos'; return render(); }
+  const ps = parcelasDe(a.id).sort((x,y)=>(x.numero_parcela||0)-(y.numero_parcela||0));
+  const tot = soma(ps,'valor_total'), rec = soma(ps,'valor_recebido'), rep = soma(ps,'valor_repassado');
+
+  const linhas = ps.map(p =>
+    '<tr>'
+    + '<td class="muted">'+(p.numero_parcela||'—')+'</td>'
+    + '<td>'+dt(p.data_vencimento)+'</td>'
+    + '<td class="num">'+brl(p.valor_total)+'</td>'
+    + '<td class="num">'+brl(p.valor_recebido)+'<div class="muted" style="font-size:12.5px">'+dt(p.data_pagamento)+'</div></td>'
+    + '<td class="num">'+brl(p.valor_repassado)+'<div class="muted" style="font-size:12.5px">'+dt(p.data_repasse)+'</div></td>'
+    + '<td>'+tagSit(situacaoReal(p))+'</td>'
+    + '<td>'+tagRep(repasseReal(p))+'</td>'
+    + '<td class="num" style="white-space:nowrap">'
+      + (situacaoReal(p)!=='Quitado' ? '<button class="btn small" data-receber="'+p.id+'">Receber</button> ' : '')
+      + (['Pendente','Atrasado'].includes(repasseReal(p)) ? '<button class="btn small ghost" data-repassar="'+p.id+'">Repassar</button> ' : '')
+      + '<button class="btn small ghost" data-editar="'+p.id+'">Editar</button></td>'
+    + '</tr>').join('');
+
+  el('main').innerHTML =
+    '<button class="back" id="voltar">← Acordos</button>'
+    + '<h1>'+esc(a.cliente)+'</h1>'
+    + '<dl class="meta">'
+      + '<div><dt>Destinatário do repasse</dt><dd>'+esc(a.dono||'—')+'</dd></div>'
+      + '<div><dt>Processo</dt><dd>'+esc(a.numero_processo||'—')+'</dd></div>'
+      + '<div><dt>Contratado</dt><dd>'+brl(tot)+'</dd></div>'
+      + '<div><dt>Recebido</dt><dd>'+brl(rec)+'</dd></div>'
+      + '<div><dt>Repassado</dt><dd>'+brl(rep)+'</dd></div>'
+      + '<div><dt>A repassar</dt><dd>'+brl(rec-rep)+'</dd></div>'
+    + '</dl>'
+    + (a.observacao ? '<div class="obs">'+esc(a.observacao)+'</div>' : '')
+    + '<div class="toolbar"><button class="btn" id="novaParcela">Adicionar parcela</button></div>'
+    + '<div class="panel">'
+    + (ps.length
+      ? '<table><thead><tr><th>#</th><th>Vencimento</th><th class="num">Valor</th><th class="num">Recebido</th><th class="num">Repassado</th><th>Situação</th><th>Repasse</th><th></th></tr></thead><tbody>'+linhas+'</tbody></table>'
+      : '<div class="empty">Esse acordo ainda não tem parcelas. Use “Adicionar parcela”.</div>')
+    + '</div>';
+
+  el('voltar').onclick = () => { abertoId = null; view='acordos'; render(); };
+  el('novaParcela').onclick = () => modalParcela(null, a.id);
+}
+
+async function receber(pid){
+  const p = PARCELAS.find(x=>x.id===pid);
+  const r = await db.from('parcelas').update({
+    valor_recebido: p.valor_total,
+    data_pagamento: p.data_pagamento || hoje(),
+    situacao: 'Quitado',
+    updated_at: new Date().toISOString()
+  }).eq('id',pid);
+  if(r.error) return alert('Não deu para salvar: '+r.error.message);
+  await recarregar();
+}
+async function repassar(pid){
+  const p = PARCELAS.find(x=>x.id===pid);
+  const r = await db.from('parcelas').update({
+    valor_repassado: p.valor_recebido,
+    data_repasse: hoje(),
+    status_repasse: 'Repassado',
+    updated_at: new Date().toISOString()
+  }).eq('id',pid);
+  if(r.error) return alert('Não deu para salvar: '+r.error.message);
+  await recarregar();
+}
+
+function abrirModal(conteudo){
+  const v = document.createElement('div');
+  v.className = 'veil';
+  v.innerHTML = '<div class="modal">'+conteudo+'</div>';
+  v.onclick = e => { if(e.target===v) v.remove(); };
+  document.body.appendChild(v);
+  return v;
+}
+
+function modalParcela(pid, acordoId){
+  const p = pid ? PARCELAS.find(x=>x.id===pid) : {};
+  const v = abrirModal(
+    '<h3>'+(pid?'Editar parcela':'Nova parcela')+'</h3>'
+    + '<div class="grid2">'
+    + '<div class="field"><label>Número</label><input id="f_num" type="number" value="'+(p.numero_parcela??'')+'"></div>'
+    + '<div class="field"><label>Vencimento</label><input id="f_venc" type="date" value="'+(p.data_vencimento||'')+'"></div>'
+    + '<div class="field"><label>Valor da parcela</label><input id="f_tot" type="number" step="0.01" value="'+(p.valor_total??'')+'"></div>'
+    + '<div class="field"><label>Valor recebido</label><input id="f_rec" type="number" step="0.01" value="'+(p.valor_recebido??0)+'"></div>'
+    + '<div class="field"><label>Recebido em</label><input id="f_pag" type="date" value="'+(p.data_pagamento||'')+'"></div>'
+    + '<div class="field"><label>Valor repassado</label><input id="f_rep" type="number" step="0.01" value="'+(p.valor_repassado??0)+'"></div>'
+    + '<div class="field"><label>Repassado em</label><input id="f_drep" type="date" value="'+(p.data_repasse||'')+'"></div>'
+    + '<div class="field"><label>Repasse programado</label><input id="f_prog" type="date" value="'+(p.programacao_repasse||'')+'"></div>'
+    + '<div class="field wide"><label>Observações</label><textarea id="f_obs" rows="2">'+esc(p.observacoes||'')+'</textarea></div>'
+    + '</div>'
+    + '<div class="modal-foot">'
+    + (pid?'<button class="btn ghost" id="m_del" style="margin-right:auto;color:var(--brick)">Excluir</button>':'')
+    + '<button class="btn ghost" id="m_cancel">Cancelar</button>'
+    + '<button class="btn" id="m_ok">Salvar</button></div>');
+
+  v.querySelector('#m_cancel').onclick = () => v.remove();
+  const del = v.querySelector('#m_del');
+  if(del) del.onclick = async () => {
+    if(!confirm('Excluir esta parcela? Não dá para desfazer.')) return;
+    const r = await db.from('parcelas').delete().eq('id',pid);
+    if(r.error) return alert('Não deu para excluir: '+r.error.message);
+    v.remove(); await recarregar();
+  };
+  v.querySelector('#m_ok').onclick = async () => {
+    const g = id => v.querySelector('#'+id).value;
+    const dados = {
+      acordo_id: pid ? p.acordo_id : acordoId,
+      numero_parcela: g('f_num') ? +g('f_num') : null,
+      data_vencimento: g('f_venc') || null,
+      data_pagamento: g('f_pag') || null,
+      valor_total: +g('f_tot') || 0,
+      valor_recebido: +g('f_rec') || 0,
+      valor_repassado: +g('f_rep') || 0,
+      data_repasse: g('f_drep') || null,
+      programacao_repasse: g('f_prog') || null,
+      observacoes: g('f_obs') || null,
+      updated_at: new Date().toISOString()
+    };
+    dados.situacao = situacaoReal(dados);
+    dados.status_repasse = repasseReal(dados)==='—' ? 'Pendente' : repasseReal(dados);
+    const r = pid ? await db.from('parcelas').update(dados).eq('id',pid)
+                  : await db.from('parcelas').insert(dados);
+    if(r.error) return alert('Não deu para salvar: '+r.error.message);
+    v.remove(); await recarregar();
+  };
+}
+
+function modalAcordo(){
+  const v = abrirModal(
+    '<h3>Novo acordo</h3>'
+    + '<div class="grid2">'
+    + '<div class="field wide"><label>Cliente</label><input id="a_cli"></div>'
+    + '<div class="field wide"><label>Destinatário do repasse</label><input id="a_dono"></div>'
+    + '<div class="field wide"><label>Processo ou pasta</label><input id="a_proc"></div>'
+    + '<div class="field"><label>Valor total do acordo</label><input id="a_val" type="number" step="0.01"></div>'
+    + '<div class="field"><label>Quantidade de parcelas</label><input id="a_qtd" type="number" value="1"></div>'
+    + '<div class="field"><label>Primeiro vencimento</label><input id="a_ini" type="date" value="'+hoje()+'"></div>'
+    + '<div class="field"><label>Valor por parcela</label><input id="a_pp" type="number" step="0.01" readonly></div>'
+    + '<div class="field wide"><label>Observação</label><textarea id="a_obs" rows="3"></textarea></div>'
+    + '</div>'
+    + '<div class="modal-foot"><button class="btn ghost" id="a_cancel">Cancelar</button>'
+    + '<button class="btn" id="a_ok">Criar acordo</button></div>');
+
+  const calc = () => {
+    const t = +v.querySelector('#a_val').value || 0, q = +v.querySelector('#a_qtd').value || 1;
+    v.querySelector('#a_pp').value = (t/q).toFixed(2);
+  };
+  v.querySelector('#a_val').oninput = calc;
+  v.querySelector('#a_qtd').oninput = calc;
+  v.querySelector('#a_cancel').onclick = () => v.remove();
+
+  v.querySelector('#a_ok').onclick = async () => {
+    const g = id => v.querySelector('#'+id).value;
+    if(!g('a_cli').trim()) return alert('Preencha o cliente.');
+    const ac = await db.from('acordos').insert({
+      cliente: g('a_cli').trim(), dono: g('a_dono').trim() || null,
+      numero_processo: g('a_proc').trim() || null, observacao: g('a_obs').trim() || null,
+      ativo: true
+    }).select().single();
+    if(ac.error) return alert('Não deu para criar: '+ac.error.message);
+
+    const qtd = +g('a_qtd') || 0, pp = +v.querySelector('#a_pp').value || 0;
+    if(qtd > 0 && pp > 0){
+      const base = new Date(g('a_ini')+'T12:00:00');
+      const novas = Array.from({length:qtd}, (_,i) => {
+        const d = new Date(base); d.setMonth(d.getMonth()+i);
+        return { acordo_id: ac.data.id, numero_parcela: i+1,
+          data_vencimento: d.toISOString().slice(0,10),
+          valor_total: pp, valor_recebido: 0, valor_repassado: 0,
+          situacao:'Aberto', status_repasse:'Pendente' };
+      });
+      const r = await db.from('parcelas').insert(novas);
+      if(r.error) return alert('Acordo criado, mas as parcelas falharam: '+r.error.message);
+    }
+    v.remove(); abertoId = ac.data.id; view = 'detalhe'; await recarregar();
+  };
+}
+
+function baixarCsv(){
+  const cab = ['Cliente','Destinatario','Processo','Parcela','Vencimento','Valor','Recebido','Recebido em','Repassado','Repassado em','Situacao','Repasse'];
+  const linhas = PARCELAS.map(p => {
+    const a = ACORDOS.find(x=>x.id===p.acordo_id) || {};
+    return [a.cliente,a.dono,a.numero_processo,p.numero_parcela,p.data_vencimento,p.valor_total,
+      p.valor_recebido,p.data_pagamento,p.valor_repassado,p.data_repasse,situacaoReal(p),repasseReal(p)]
+      .map(c => '"'+String(c??'').replace(/"/g,'""')+'"').join(';');
+  });
+  const blob = new Blob(['﻿'+[cab.join(';')].concat(linhas).join('\n')],{type:'text/csv;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'repasses-'+hoje()+'.csv';
+  a.click();
+}
+
+function render(){
+  document.querySelectorAll('.nav button').forEach(b =>
+    b.setAttribute('aria-current', String(b.dataset.view === view)));
+  if(view === 'detalhe' && abertoId) renderDetalhe(abertoId);
+  else if(view === 'acordos') renderAcordos();
+  else if(view === 'repassar') renderRepassar();
+  else renderPainel();
+
+  const t = totais();
+  el('railFoot').innerHTML = ACORDOS.length+' acordos<br>'+PARCELAS.length+' parcelas<br>'
+    + t.atrasadas.length+' vencidas';
+}
+
+async function recarregar(){ if(await carregar()) render(); }
+
+document.querySelectorAll('.nav button').forEach(b =>
+  b.onclick = () => { view = b.dataset.view; abertoId = null; render(); });
+
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-abrir],[data-filtro],[data-receber],[data-repassar],[data-editar],#novo,#csv');
+  if(!t) return;
+  if(t.dataset.abrir){ abertoId = t.dataset.abrir; view='detalhe'; render(); }
+  else if(t.dataset.filtro){ filtro = t.dataset.filtro; renderAcordos(); }
+  else if(t.dataset.receber){ e.stopPropagation(); receber(t.dataset.receber); }
+  else if(t.dataset.repassar){ e.stopPropagation(); repassar(t.dataset.repassar); }
+  else if(t.dataset.editar){ e.stopPropagation(); modalParcela(t.dataset.editar); }
+  else if(t.id === 'novo'){ modalAcordo(); }
+  else if(t.id === 'csv'){ baixarCsv(); }
+});
+
+recarregar();
+</script>
+</body>
+</html>
