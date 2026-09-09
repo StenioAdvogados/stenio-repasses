@@ -1,0 +1,23 @@
+name: keepalive
+# Impede o projeto do Supabase de hibernar no plano free.
+# Faz uma consulta minima por dia usando a chave publicavel,
+# que ja e publica no index.html - por isso nao precisa de secret.
+on:
+  schedule:
+    - cron: '0 12 * * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Consultar o banco
+        run: |
+          URL="https://haxsaymsakyfqbnzbnwl.supabase.co/rest/v1/acordos?select=id&limit=1"
+          KEY="sb_publishable_XGt4wMdu7L9XkhOPKpPBJA_dVjqyzTR"
+          CODE=$(curl -s -o /dev/null -w "%{http_code}" "$URL" -H "apikey: $KEY" -H "Authorization: Bearer $KEY")
+          echo "HTTP $CODE"
+          if [ "$CODE" != "200" ]; then
+            echo "Banco nao respondeu 200. Verifique se o projeto esta ativo."
+            exit 1
+          fi
