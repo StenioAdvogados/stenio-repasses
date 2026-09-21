@@ -487,7 +487,8 @@ function renderDetalhe(id){
       + '<div><dt>A repassar</dt><dd>'+brl(rec-rep)+'</dd></div>'
     + '</dl>'
     + (a.observacao ? '<div class="obs">'+esc(a.observacao)+'</div>' : '')
-    + '<div class="toolbar"><button class="btn" id="novaParcela">Adicionar parcela</button></div>'
+    + '<div class="toolbar"><button class="btn" id="novaParcela">Adicionar parcela</button>'
+    + '<button class="btn ghost" id="excluirAcordo" style="margin-left:auto;color:var(--brick)">Excluir acordo</button></div>'
     + '<div class="panel">'
     + (ps.length
       ? '<table><thead><tr><th>#</th><th>Vencimento</th><th class="num">Valor</th><th class="num">Recebido</th><th class="num">Repassado</th><th>Situação</th><th>Repasse</th><th></th></tr></thead><tbody>'+linhas+'</tbody></table>'
@@ -496,6 +497,37 @@ function renderDetalhe(id){
 
   el('voltar').onclick = () => { abertoId = null; view='acordos'; render(); };
   el('novaParcela').onclick = () => modalParcela(null, a.id);
+  el('excluirAcordo').onclick = () => excluirAcordo(a.id);
+}
+
+async function excluirAcordo(id){
+  const a = ACORDOS.find(x=>x.id===id);
+  if(!a) return;
+  const ps = parcelasDe(id);
+  const rec = soma(ps,'valor_recebido'), rep = soma(ps,'valor_repassado');
+  const resumo = a.cliente + (a.numero_processo ? ' ('+a.numero_processo+')' : '')
+    + '\n' + ps.length + ' parcela(s) serão excluídas junto.';
+
+  if(rec > 0 || rep > 0){
+    const txt = prompt('ATENÇÃO: este acordo tem movimentação registrada.\n'
+      + 'Recebido: ' + brl(rec) + ' | Repassado: ' + brl(rep) + '\n\n'
+      + resumo + '\nNão dá para desfazer.\n\nDigite EXCLUIR para confirmar:');
+    if((txt||'').trim().toUpperCase() !== 'EXCLUIR') return;
+  } else {
+    if(!confirm('Excluir o acordo de ' + resumo + '\nNão dá para desfazer.')) return;
+  }
+
+  if(ps.length){
+    const rp = await db.from('parcelas').delete().eq('acordo_id', id);
+    if(rp.error) return alert('Não deu para excluir as parcelas: '+rp.error.message);
+  }
+  const ra = await db.from('acordos').delete().eq('id', id);
+  if(ra.error){
+    alert('As parcelas foram excluídas, mas o acordo não: '+ra.error.message);
+    return recarregar();
+  }
+  abertoId = null; view = 'acordos';
+  await recarregar();
 }
 
 async function receber(pid){
