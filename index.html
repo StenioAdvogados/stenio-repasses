@@ -180,6 +180,7 @@ const SUPABASE_KEY = 'sb_publishable_XGt4wMdu7L9XkhOPKpPBJA_dVjqyzTR';
 const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 let ACORDOS = [], PARCELAS = [], view = 'painel', filtro = 'todos', busca = '', abertoId = null;
+let detSit = 'todas', detRep = 'todos', detId = null;
 
 const brl = n => (Number(n)||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
 const brlShort = n => (Number(n)||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL',maximumFractionDigits:0});
@@ -461,8 +462,15 @@ function renderRepassar(){
 function renderDetalhe(id){
   const a = ACORDOS.find(x=>x.id===id);
   if(!a){ view='acordos'; return render(); }
-  const ps = parcelasDe(a.id).sort((x,y)=>(x.numero_parcela||0)-(y.numero_parcela||0));
-  const tot = soma(ps,'valor_total'), rec = soma(ps,'valor_recebido'), rep = soma(ps,'valor_repassado');
+  if(detId !== a.id){ detId = a.id; detSit = 'todas'; detRep = 'todos'; }
+  const todas = parcelasDe(a.id).sort((x,y)=>(x.numero_parcela||0)-(y.numero_parcela||0));
+  const tot = soma(todas,'valor_total'), rec = soma(todas,'valor_recebido'), rep = soma(todas,'valor_repassado');
+  const ps = parcelasFiltradas(a.id);
+
+  const grupo = (rotulo, attr, atual, opcoes) =>
+    '<div style="display:flex;align-items:center;gap:8px"><span class="muted" style="font-size:12.5px">'+rotulo+'</span><div class="tabs">'
+    + opcoes.map(([v,t]) => '<button '+attr+'="'+v+'" aria-pressed="'+(atual===v)+'">'+t+'</button>').join('')
+    + '</div></div>';
 
   const linhas = ps.map(p =>
     '<tr>'
@@ -495,15 +503,33 @@ function renderDetalhe(id){
     + (a.observacao ? '<div class="obs">'+esc(a.observacao)+'</div>' : '')
     + '<div class="toolbar"><button class="btn" id="novaParcela">Adicionar parcela</button>'
     + '<button class="btn ghost" id="excluirAcordo" style="margin-left:auto;color:var(--brick)">Excluir acordo</button></div>'
+    + '<div class="toolbar">'
+      + grupo('Situação','data-fsit',detSit,[['todas','Todas'],['Aberto','Aberto'],['Atrasado','Atrasado'],['Quitado','Quitado']])
+      + grupo('Repasse','data-frep',detRep,[['todos','Todos'],['Pendente','Pendente'],['Atrasado','Atrasado'],['Repassado','Repassado'],['—','Sem recebimento']])
+      + '<span class="muted" style="font-size:12.5px">'+ps.length+' de '+todas.length+' parcelas</span>'
+      + '<button class="btn ghost" id="pdfDetalhe" style="margin-left:auto">Baixar PDF</button>'
+    + '</div>'
     + '<div class="panel">'
-    + (ps.length
+    + (!todas.length
+      ? '<div class="empty">Esse acordo ainda não tem parcelas. Use “Adicionar parcela”.</div>'
+      : ps.length
       ? '<table><thead><tr><th>#</th><th>Vencimento</th><th class="num">Valor</th><th class="num">Recebido</th><th class="num">Repassado</th><th>Situação</th><th>Repasse</th><th></th></tr></thead><tbody>'+linhas+'</tbody></table>'
-      : '<div class="empty">Esse acordo ainda não tem parcelas. Use “Adicionar parcela”.</div>')
+      : '<div class="empty">Nenhuma parcela com esse filtro.</div>')
     + '</div>';
 
   el('voltar').onclick = () => { abertoId = null; view='acordos'; render(); };
   el('novaParcela').onclick = () => modalParcela(null, a.id);
   el('excluirAcordo').onclick = () => excluirAcordo(a.id);
+  el('pdfDetalhe').onclick = () => pdfDetalhe(a.id);
+  el('main').querySelectorAll('[data-fsit]').forEach(b => b.onclick = () => { detSit = b.dataset.fsit; renderDetalhe(a.id); });
+  el('main').querySelectorAll('[data-frep]').forEach(b => b.onclick = () => { detRep = b.dataset.frep; renderDetalhe(a.id); });
+}
+
+function parcelasFiltradas(acordoId){
+  return parcelasDe(acordoId)
+    .filter(p => detSit==='todas' || situacaoReal(p)===detSit)
+    .filter(p => detRep==='todos' || repasseReal(p)===detRep)
+    .sort((x,y)=>(x.numero_parcela||0)-(y.numero_parcela||0));
 }
 
 async function excluirAcordo(id){
@@ -825,6 +851,59 @@ function pdfAcordos(){
        if(d.section==='body' && d.column.index===4 && d.cell.raw==='Atrasado') d.cell.styles.textColor=[179,64,43];
      }});
   rodapePdf(doc, 'acordos');
+}
+
+function pdfDetalhe(id){
+  const a = ACORDOS.find(x=>x.id===id); if(!a) return;
+  const todas = parcelasDe(a.id);
+  const ps = parcelasFiltradas(a.id);
+  const tot = soma(todas,'valor_total'), rec = soma(todas,'valor_recebido'), rep = soma(todas,'valor_repassado');
+  const nomeRep = {'—':'Sem recebimento'};
+  const filtroTxt = (detSit==='todas' && detRep==='todos') ? 'Todas as parcelas'
+    : 'Filtro: ' + [detSit!=='todas' ? 'situação '+detSit.toLowerCase() : null,
+                    detRep!=='todos' ? 'repasse '+(nomeRep[detRep]||detRep).toLowerCase() : null].filter(Boolean).join(' e ');
+  const r = novoPdf(a.cliente||'Acordo', 'Destinatário: '+(a.dono||'—')+'  ·  Processo: '+(a.numero_processo||'—'));
+  if(!r) return;
+  let {doc, y} = r;
+
+  // resumo do acordo (sempre o acordo inteiro)
+  const cards = [['Contratado',tot],['Recebido',rec],['Repassado',rep],['A repassar',rec-rep]];
+  const cw = (doc.internal.pageSize.getWidth()-28)/4;
+  cards.forEach(([t,v],i) => {
+    const x = 14 + i*cw;
+    doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(90,104,116); doc.text(t, x, y);
+    doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(22,32,43); doc.text(brl(v), x, y+5.5);
+  });
+  y += 12;
+
+  if(a.observacao){
+    doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(22,32,43);
+    const linhas = doc.splitTextToSize(String(a.observacao).replace(/\n{2,}/g,'\n'), doc.internal.pageSize.getWidth()-34);
+    const h = linhas.length*3.8 + 6;
+    doc.setDrawColor(211,218,214); doc.setFillColor(246,248,247); doc.roundedRect(14, y, doc.internal.pageSize.getWidth()-28, h, 1.5, 1.5, 'FD');
+    doc.text(linhas, 17, y+5);
+    y += h + 7;
+  }
+
+  doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(22,32,43);
+  doc.text('Parcelas', 14, y);
+  doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(90,104,116);
+  doc.text(filtroTxt+'  ·  '+ps.length+' de '+todas.length, 34, y);
+  y += 3;
+
+  tabelaPdf(doc, y, ['#','Vencimento','Valor','Recebido','Recebido em','Repassado','Repassado em','Situação','Repasse'],
+    ps.map(p => [p.numero_parcela||'—', dt(p.data_vencimento), brl(p.valor_total), brl(p.valor_recebido), dt(p.data_pagamento),
+      brl(p.valor_repassado), dt(p.data_repasse), situacaoReal(p), nomeRep[repasseReal(p)]||repasseReal(p)]),
+    {styles:{font:'helvetica', fontSize:8, cellPadding:2, textColor:[22,32,43], lineColor:[211,218,214], lineWidth:0.1},
+     align:{0:'center',2:'right',3:'right',5:'right'},
+     foot:[['','Total', brl(soma(ps,'valor_total')), brl(soma(ps,'valor_recebido')), '', brl(soma(ps,'valor_repassado')), '', '', '']],
+     footStyles:{fillColor:[238,241,239], textColor:[22,32,43], fontStyle:'bold'},
+     didParseCell: d => {
+       if(d.section==='body' && (d.column.index===7 || d.column.index===8) && d.cell.raw==='Atrasado') d.cell.styles.textColor=[179,64,43];
+     }});
+
+  const slug = String(a.cliente||'acordo').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
+  rodapePdf(doc, 'acordo-'+slug);
 }
 
 function render(){
