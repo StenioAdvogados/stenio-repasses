@@ -8,6 +8,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <style>
 :root{
   --ink:#16202b;
@@ -398,6 +400,7 @@ function renderAcordos(){
       + '<input class="search" id="busca" placeholder="Buscar cliente, destinatário ou processo" value="'+esc(busca)+'">'
       + '<button class="btn" id="novo">Novo acordo</button>'
       + '<button class="btn ghost" id="csv">Baixar CSV</button>'
+      + '<button class="btn ghost" id="pdfAcordos">Baixar PDF</button>'
     + '</div>'
     + '<div class="panel">'
     + (lista.length
@@ -437,7 +440,10 @@ function renderRepassar(){
   }).join('');
 
   el('main').innerHTML =
-    '<h1>A repassar</h1><p class="sub">Recebido do cliente e ainda não entregue ao destinatário</p>'
+    '<div class="toolbar" style="justify-content:space-between;align-items:flex-start;margin-top:0">'
+      + '<div><h1>A repassar</h1><p class="sub">Recebido do cliente e ainda não entregue ao destinatário</p></div>'
+      + '<button class="btn ghost" id="pdfRepassar">Baixar PDF</button>'
+    + '</div>'
     + '<section class="hero"><div class="hero-main">'
       + '<div class="hero-label">Total parado</div>'
       + '<div class="hero-value">'+brl(totalPend)+'</div>'
@@ -701,6 +707,126 @@ function baixarCsv(){
   a.click();
 }
 
+// ---------- Exportar PDF ----------
+function acordosFiltrados(){
+  const termo = busca.toLowerCase();
+  return ACORDOS.filter(a => {
+    const ps = parcelasDe(a.id);
+    const quitado = ps.length > 0 && ps.every(p => situacaoReal(p)==='Quitado');
+    const atrasado = ps.some(p => situacaoReal(p)==='Atrasado');
+    if(filtro==='quitados' && !quitado) return false;
+    if(filtro==='atrasados' && !atrasado) return false;
+    if(filtro==='abertos' && quitado) return false;
+    if(termo && !((a.cliente||'')+' '+(a.dono||'')+' '+(a.numero_processo||'')).toLowerCase().includes(termo)) return false;
+    return true;
+  });
+}
+
+function novoPdf(titulo, subtitulo, orientacao){
+  if(!window.jspdf){ alert('Não consegui carregar o gerador de PDF. Confere a internet e recarrega a página.'); return null; }
+  const doc = new window.jspdf.jsPDF({unit:'mm', format:'a4', orientation: orientacao||'portrait'});
+  const W = doc.internal.pageSize.getWidth();
+  doc.setFont('helvetica','bold'); doc.setFontSize(16); doc.setTextColor(22,32,43);
+  doc.text(titulo, 14, 18);
+  doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(90,104,116);
+  doc.text('Stenio Advogados  ·  gerado em '+dt(hoje())+' às '+new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}), 14, 24);
+  if(subtitulo) doc.text(subtitulo, 14, 29);
+  doc.setDrawColor(211,218,214); doc.line(14, subtitulo?32:27, W-14, subtitulo?32:27);
+  return {doc, y: subtitulo?38:33};
+}
+
+function tabelaPdf(doc, y, head, body, opts){
+  opts = opts || {};
+  const align = opts.align || {}, extra = opts.didParseCell;
+  delete opts.align; delete opts.didParseCell;
+  doc.autoTable(Object.assign({
+    didParseCell: d => { if(align[d.column.index]) d.cell.styles.halign = align[d.column.index]; if(extra) extra(d); },
+    startY: y, head: [head], body,
+    margin: {left:14, right:14},
+    styles: {font:'helvetica', fontSize:8.5, cellPadding:2.2, textColor:[22,32,43], lineColor:[211,218,214], lineWidth:0.1},
+    headStyles: {fillColor:[22,32,43], textColor:255, fontStyle:'bold'},
+    alternateRowStyles: {fillColor:[246,248,247]},
+  }, opts));
+  return doc.lastAutoTable.finalY;
+}
+
+function rodapePdf(doc, nome){
+  const n = doc.getNumberOfPages(), W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight();
+  for(let i=1;i<=n;i++){
+    doc.setPage(i); doc.setFontSize(8); doc.setTextColor(90,104,116);
+    doc.text('Página '+i+' de '+n, W-14, H-7, {align:'right'});
+  }
+  doc.save(nome+'-'+hoje()+'.pdf');
+}
+
+function pdfRepassar(){
+  const pend = PARCELAS.filter(p => ['Pendente','Atrasado'].includes(repasseReal(p)))
+    .sort((a,b)=>(a.programacao_repasse||'9999').localeCompare(b.programacao_repasse||'9999'));
+  const saldo = p => Number(p.valor_recebido)-Number(p.valor_repassado);
+  const total = pend.reduce((s,p)=>s+saldo(p),0);
+  const porDono = {};
+  pend.forEach(p => {
+    const a = ACORDOS.find(x=>x.id===p.acordo_id) || {};
+    const d = a.dono || 'Sem destinatário';
+    porDono[d] = porDono[d] || {n:0, v:0};
+    porDono[d].n++; porDono[d].v += saldo(p);
+  });
+
+  const r = novoPdf('Relatório de repasses pendentes', pend.length+' parcela'+(pend.length===1?'':'s')+'  ·  total a repassar '+brl(total));
+  if(!r) return;
+  let {doc, y} = r;
+
+  doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(22,32,43);
+  doc.text('Por destinatário', 14, y); y += 3;
+  const donos = Object.entries(porDono).sort((a,b)=>b[1].v-a[1].v);
+  y = tabelaPdf(doc, y, ['Destinatário','Parcelas','Valor'],
+    donos.map(([d,o]) => [d, o.n, brl(o.v)]),
+    {columnStyles:{1:{cellWidth:24},2:{cellWidth:40}}, align:{1:'center',2:'right'},
+     foot:[['Total', pend.length, brl(total)]],
+     footStyles:{fillColor:[238,241,239], textColor:[22,32,43], fontStyle:'bold'}});
+
+  y += 9;
+  doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(22,32,43);
+  doc.text('Parcela a parcela', 14, y); y += 3;
+  tabelaPdf(doc, y, ['Destinatário','Cliente','Parc.','Recebido em','Programado','Status','Valor'],
+    pend.map(p => {
+      const a = ACORDOS.find(x=>x.id===p.acordo_id) || {};
+      return [a.dono||'—', a.cliente||'—', p.numero_parcela||'—', dt(p.data_pagamento), dt(p.programacao_repasse), repasseReal(p), brl(saldo(p))];
+    }),
+    {align:{2:'center',6:'right'},
+     didParseCell: d => { if(d.section==='body' && d.column.index===5 && d.cell.raw==='Atrasado') d.cell.styles.textColor=[179,64,43]; }});
+
+  rodapePdf(doc, 'repasses-pendentes');
+}
+
+function pdfAcordos(){
+  const lista = acordosFiltrados();
+  let tTot=0, tRec=0, tRep=0;
+  const linhas = lista.map(a => {
+    const ps = parcelasDe(a.id);
+    const tot = soma(ps,'valor_total'), rec = soma(ps,'valor_recebido'), rep = soma(ps,'valor_repassado');
+    tTot+=tot; tRec+=rec; tRep+=rep;
+    const quitado = ps.length>0 && ps.every(p => situacaoReal(p)==='Quitado');
+    const atrasado = ps.some(p => situacaoReal(p)==='Atrasado');
+    return [a.cliente||'—', a.dono||'—', a.numero_processo||'—', ps.length,
+      quitado?'Quitado':atrasado?'Atrasado':'Aberto', brl(tot), brl(rec), brl(rep)];
+  });
+  const filtroTxt = 'Filtro: '+filtro+(busca?'  ·  busca "'+busca+'"':'')+'  ·  '+lista.length+' acordo'+(lista.length===1?'':'s');
+  const r = novoPdf('Relatório de acordos', filtroTxt, 'landscape');
+  if(!r) return;
+  const {doc, y} = r;
+  tabelaPdf(doc, y, ['Cliente','Destinatário','Processo','Parc.','Situação','Total','Recebido','Repassado'], linhas,
+    {styles:{font:'helvetica', fontSize:8.5, cellPadding:2.2, textColor:[22,32,43], lineColor:[211,218,214], lineWidth:0.1},
+     columnStyles:{5:{minCellWidth:30},6:{minCellWidth:30},7:{minCellWidth:30}},
+     align:{3:'center',5:'right',6:'right',7:'right'},
+     foot:[['Total','','','','',brl(tTot),brl(tRec),brl(tRep)]],
+     footStyles:{fillColor:[238,241,239], textColor:[22,32,43], fontStyle:'bold'},
+     didParseCell: d => {
+       if(d.section==='body' && d.column.index===4 && d.cell.raw==='Atrasado') d.cell.styles.textColor=[179,64,43];
+     }});
+  rodapePdf(doc, 'acordos');
+}
+
 function render(){
   document.querySelectorAll('.nav button').forEach(b =>
     b.setAttribute('aria-current', String(b.dataset.view === view)));
@@ -720,7 +846,7 @@ document.querySelectorAll('.nav button').forEach(b =>
   b.onclick = () => { view = b.dataset.view; abertoId = null; render(); });
 
 document.addEventListener('click', e => {
-  const t = e.target.closest('[data-abrir],[data-filtro],[data-receber],[data-repassar],[data-estorno-rep],[data-estorno-rec],[data-editar],#novo,#csv,#copiarFila');
+  const t = e.target.closest('[data-abrir],[data-filtro],[data-receber],[data-repassar],[data-estorno-rep],[data-estorno-rec],[data-editar],#novo,#csv,#copiarFila,#pdfRepassar,#pdfAcordos');
   if(!t) return;
   if(t.dataset.abrir){ abertoId = t.dataset.abrir; view='detalhe'; render(); }
   else if(t.dataset.filtro){ filtro = t.dataset.filtro; renderAcordos(); }
@@ -731,6 +857,8 @@ document.addEventListener('click', e => {
   else if(t.dataset.editar){ e.stopPropagation(); modalParcela(t.dataset.editar); }
   else if(t.id === 'novo'){ modalAcordo(); }
   else if(t.id === 'csv'){ baixarCsv(); }
+  else if(t.id === 'pdfRepassar'){ pdfRepassar(); }
+  else if(t.id === 'pdfAcordos'){ pdfAcordos(); }
   else if(t.id === 'copiarFila'){ copiarFila(); }
 });
 
